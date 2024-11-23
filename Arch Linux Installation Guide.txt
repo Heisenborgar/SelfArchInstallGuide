@@ -1,0 +1,328 @@
+=================================
+| Arch Linux Installation Steps |
+=================================
+
+A. Pre-Installation: 
+    
+    1. Always read the Arch Wiki. Read the Fucking Manual.
+
+    2. Acquire an installation image.
+
+    3. Prepare an installation medium.
+        A. In Linux: 
+            # sudo cp path/to/archlinuxiso /dev/disk/by-id/usb* - To install Arch ISO to USB.
+            # sudo wipefs --all /dev/disk/by-id/usb* - Only use to restore USB to usable state.
+        B. In Windows, use Rufus.
+
+    4. Boot into live environment, then verify boot mode:
+        # cat /sys/firmware/efi_fw_platform_size - Should return 64, not 32.
+    
+    5. Connect to internet. If using WiFi:
+        # iwctl
+        # device list
+        # device [device] set-property Powered on
+        # adapter [adapter] set-property Powered on
+        # station [device] scan
+        # station [device] get-networks
+        # station [device] connect [wifi]
+        # exit
+        # ping [website]
+
+        OR
+
+        # iwctl
+        # station [device] scan
+        # station [device] connect [wifi]
+        # exit
+        # ping [website]
+
+        - If device set-property fails, adapter set-property should be executed first.
+        - If ping fails, WiFi is not properly connected due to incorrect password.
+
+    6. Update the system clock.
+        # timedatectl
+        # nano /etc/systemd/timesyncd.conf
+            - Uncomment and set NTP=time.google.com
+        # timedatectl set-ntp true
+        # systemctl restart systemd-timesyncd.service
+
+        - Time is synced automatically once connection to internet is established. The command above ensures the system clock is accurate.
+
+    7. Increase package download and installation speed.
+        # nano /etc/makepkg.conf
+            - Set MAKEFLAGS="-j2" - To "-j[number of cpu threads]".
+        # nano /etc/pacman.conf
+            - Uncomment Color and ParralelDownloads and set to 10 (optional).
+            - Uncomment Multilib repository.
+        # pacman -Sy
+
+    8. Partition the disks using cfdisk.
+        # lsblk - To check list device disks
+        # cfdisk /dev/[disk]
+            - Delete all partitions except backup disk.
+            - Add partition for boot - Minimum of 500M, set to EFI.
+            - Add partition for swap - Minimum of 8G, set to Linux Swap.
+            - Add partition for root - Any size[G], set to Linux Filesystem.
+            - Add or keep partition for backup - Any size[G], set to Linux Filesystem.
+            - Select Write and type "yes" to confirm set partitions.
+        # lsblk - To check and confirm new list of device disks.
+
+    9. Format the partitions.
+        # mkfs.fat -F32 /dev/[disk] - Select boot partition.
+        # mkswap /dev/[disk] - Select swap partition.
+        # mkfs.ext4 /dev/[disk] - Select root partition. 
+        # mkfs.ext4 /dev/[disk] - Select backup partition. Don't execute this command if backup partition is set.
+
+    10. Mount the partitions.
+        # mount /dev/[disk] /mnt - Select root partition.
+        # mount --mkdir /dev/[disk] /mnt/boot - Select boot partition.
+        # swapon /dev/[disk] - Select swap partition. 
+        # mount --mkdir /dev/[disk] /mnt/[folder] - Select backup partition.
+        # lsblk - To check and confirm mount partitions.
+
+        - This should be done in order, and not the other way around.
+
+B. Installation:
+
+    1. Select the download mirrors.
+        # pacman-key --init; pacman-key --populate
+        # pacman -S pacman-contrib
+        # cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak
+        # rankmirrors -n 6 /etc/pacman.d/mirrorlist.bak > /etc/pacman.d/mirrorlist
+        # cat /etc/pacman.d/mirrorlist - To check generated mirror list.
+
+    2. Install essential packages.
+        # pacstrap -K /mnt base linux linux-firmware amd-ucode networkmanager nano sudo
+
+        - Subtitute linux with a kernel package of choice i.e., linux-lts or linux-zen.
+        - Base-devel is not included in pacstrap, do it while in live environment or in chroot.
+
+    3. Generate fstab.
+        # genfstab -U /mnt >> /mnt/etc/fstab
+        # cat /mnt/etc/fstab - To check the generated fstab.
+
+    4. Boot into chroot.
+        # arch-chroot /mnt
+    
+    5. Set timezone and localization.
+        # ln -sf /usr/share/zoneinfo/Asia/Manila /etc/localtime
+        # timedatectl - Check if NTP is active and system clock is synchronized
+
+        # hwclock --systohc
+        # nano /etc/locale.gen
+            - Uncomment en_US.UTF-8 UTF-8
+        # locale-gen
+        # nano /etc/locale.conf
+            - Insert LANG=en_US.UTF-8
+        # date - To check system date
+
+    6. Network configuration.
+        # nano /etc/hostname
+            - Insert hostname i.e., Harbinger.
+        # passwd
+            - Enter password.
+
+    7. Increase package download and installation speed.
+        # nano /etc/makepkg.conf
+            - Set MAKEFLAGS="-j2" - To "-j[number of cpu threads]".
+        # nano /etc/pacman.conf
+            - Uncomment Color and ParralelDownloads and set to 10 (optional).
+            - Uncomment Multilib repository.
+        # pacman -Sy
+    
+    8. Enable SSD trim support for SSDs.
+        # systemctl enable fstrim.timer
+
+    9. Adding users.
+        # useradd -m -g users -G wheel,storage,power -s /bin/bash [User]
+        # passwd [User]
+        # EDITOR=nano visudo
+            - Uncomment %wheel ALL=(ALL:ALL) ALL.
+            - Add Defaults rootpw at the end of the file.
+        # su [User]
+        # sudo ls - To test sudo privelleges.
+        # exit
+
+    10. Setup bootloader.
+        # mount -t efivarfs efivarfs /sys/firmware/efi/efivarfs
+        # ls /sys/firmware/efi/efivarfs - To check.
+        # bootctl install
+        # nano /boot/loader/entries/arch.conf
+            - Insert title Arch
+            - Insert linux /vmlinuz-linux
+            - Insert initrd /initramfs-linux.img
+        # echo "options root=PARTUUID=$(blkid -s PARTUUID -o value /dev/[disk]) rw tsc=unstable trace_clock=local" >> /boot/loader/entries/arch.conf - Select root partition.
+        # nano /boot/loader/entries/arch.conf - To check. 
+
+        - Title can be changed to anything.
+        - Subtitute /vmlinuz-linux with kernel of choice i.e., /vmlinuz-linux-lts or /vmlinuz-linux-zen.
+        - Subtitute /initramfs-linux with kernel of choice i.e., /initramfs-linux-lts or /initramfs-linux-zen. 
+
+    11.Enable Network Connection.
+        # systemctl enable NetworkManager.service
+
+    12. Booting into bare system.
+        # exit
+        # umount -R /mnt
+        # reboot - 
+        
+        - Remove flash drive after rebooting.
+
+C. Post-Installation:
+
+    1. Setup WiFi.
+        # nmtui
+        # ping [website]
+
+    2. Install recommended app packages on official repository.
+        # sudo pacman -S sddm git fastfetch libreoffice-fresh hunspell-en_us base-devel fish qbittorrent bluez pipewire-pulse yt-dlp wine unrar p7zip vlc plasma konsole kate dolphin dolphin-plugins ark gwenview spectacle okular thunderbird goverlay steam guvcview wget bleachbit filelight dosfstools flatpak protontricks htop powertop icoutils
+        # sudo systemctl enable bluetooth.service
+        # sudo systemctl enable sddm.service
+        # chsh -s /usr/bin/fish
+
+    3. Enable Chaotic-AUR and Paru.
+        # sudo pacman-key --recv-keys 3056513887B78AEB --keyserver keyserver.ubuntu.com
+        # sudo pacman-key --lsign-key 3056513887B78AEB
+        # sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst'
+        # sudo pacman -U 'https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-mirrorlist.pkg.tar.zst'
+        # sudo nano /etc/pacman.conf
+            - Insert
+                [chaotic-aur]
+                Include = /etc/pacman.d/chaotic-mirrorlist
+
+        # sudo pacman -Syy paru
+
+    4. Install recommended app packages on AUR repository.
+        # sudo pacman -S paru floorp gamemode lib32-gamemode mangohud lib32-mangohud downgrade
+        # paru -S zramd
+        # sudo systemctl enable --now zramd
+        # systemctl --user enable gamemoded && systemctl --user start gamemoded
+
+    5. Enabling root password authentication for polkit.
+        # sudo nano /etc/polkit-1/rules.d/49-rootpw_global.rules
+            - Insert
+                polkit.addAdminRule(function(action,subject) {
+                    return ["unix-user:root"];
+                });
+
+    6. Setup graphic and video acceleration for everyday use and gaming (AMD).
+        # sudo pacman -S mesa lib32-mesa xf86-video-amdgpu vulkan-radeon lib32-vulkan-radeon vulkan-icd-loader lib32-vulkan-icd-loader libva-mesa-driver mesa-vdpau
+
+    7. Creating Aliases for Friendly Interactive Shell (Fish) for command shortcuts.
+        # nano .config/fish/config.fish
+            Format: alias [name] '[command]'
+                - Insert
+                    alias as-update 'paru -Syu; flatpak update'
+                    alias as-rns 'paru -c; flatpak uninstall --unused --delete-data'
+                    alias as-sc 'sudo pacman -Sc; paru -Sc'
+        # source .cofig/fish/config.fish - To update changes.    
+        # reboot
+
+    8. Limit battery threshold to lessen battery deterioration.
+        # sudo nano /etc/udev/rules.d/asus-battery-charge-threshold.rules
+            - Insert
+                ACTION=="add", KERNEL=="asus-nb-wmi", RUN+="/bin/bash -c 'echo 80 > /sys/class/power_supply/BAT?/charge_control_end_threshold'"
+
+    9. Install Windows 11 fonts and fix missing asian fonts.
+        # sudo pacman -S ttf-ms-fonts adobe-source-han-sans-otc-fonts
+
+    10. Disable laptop webcam always running.
+        # sudo mkdir -p .config/wireplumber/wireplumber.conf.d/
+        # sudo nano .config/wireplumber/wireplumber.conf.d/10-disable-camera.conf
+            - Insert
+                wireplumber.profiles = {
+                    main = {
+                        monitor.libcamera = disabled
+                    }
+                }
+        # systemctl restart --user wireplumber
+        
+    11. Enable Throttle Temp.
+        # paru -S temp-throttle
+        # sudo nano /etc/systemd/system/temp-throttle.service
+            - Insert
+                Description=Linux shell script for throttling system CPU frequency based on a desired maximum temperature (celcius)
+                After=multi-user.target
+
+                [Service]
+                Type=oneshot
+                ExecStart=/usr/bin/temp-throttle 90
+
+                [Install]
+                WantedBy=multi-user.target
+
+        # sudo systemctl enable temp-throttle.service
+
+E. Others:
+
+    1. Increasing Qbittorrent's download speed.
+        On Connection tab, set:
+            Global maximum number of connections to > 1000.
+            Maximum number of connections per torrent to > 1000.
+            Global maximum number of upload slots to > 10.
+            Maximum number of upload slots per torrent to > 10.
+
+        On Speed tab, set:
+            Set upload to 500.
+
+        On BitTorrent tab, set:
+            Set encryption mode to require encryption.
+
+    2. Installing Qemu Hypervisor for virtualization.
+        # sudo pacman -S qemu-desktop libvirt virt-manager dnsmasq
+        # sudo systemctl enable libvirtd.service
+        # sudo systemctl start libvirtd.service
+        # sudo usermod -aG libvirt $USER
+        # sudo virsh net-list --all
+        # sudo virsh net-start default
+
+        - Execute the last two commands when Qemu has encountered a default network not active error.
+
+    3. Granting permission when user is unable to create files or folder.
+        # sudo chown [user] /[directory]
+
+    4. Fixing Synthesis patcher issues.
+        # wget https://cacerts.digicert.com/universal-root.crt.pem
+        # sudo trust anchor --store universal-root.crt.pem
+
+    5. Installing essential protontricks files.
+        # protontricks 489830 vcrun2022 d3dcompiler_46 d3dcompiler_47 dotnet7 dotnetdesktop7
+
+    6. Install Limo Mod Manager and Sober (Roblox).
+        # flatpak install flathub io.github.limo_app.limo
+        # flatpak install --user https://sober.vinegarhq.org/sober.flatpakref
+
+    7. Reset Steam achievements/
+        # steam://open/console
+        # reset_all_stats [appid]
+
+            - AppId List
+                489830 - Skyrim Special Edition
+
+    8. Run FSCK on boot drive to fix errors.
+        # sudo umount /dev/[disk]
+        # sudo fsck.fat /dev/[disk]
+        # sudo mount /dev/[disk] /[directory]
+
+    9. Check for errors.
+        # sudo dmesg --level=warn,err,crit
+
+    10. Forcing Floorp to use Wayland.
+        # sudo nano /etc/environment
+            - Insert MOZ_ENABLE_WAYLAND=1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
