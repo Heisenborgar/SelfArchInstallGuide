@@ -307,11 +307,6 @@ E. Others:
     9. Check for errors.
         # sudo dmesg --level=warn,err,crit
 
-    10. Forcing Floorp to use Wayland.
-        # sudo nano /etc/environment
-            - Insert MOZ_ENABLE_WAYLAND=1
-
-
 
 
 
